@@ -29,7 +29,8 @@ CREATE TABLE producto (
     CONSTRAINT fk_producto_categoria FOREIGN KEY (categoria_id) 
         REFERENCES categoria(id) ON DELETE RESTRICT,
     CONSTRAINT chk_producto_precio CHECK (precio_lista >= 0),
-    CONSTRAINT chk_producto_stock CHECK (stock >= 0)
+    CONSTRAINT chk_producto_stock CHECK (stock >= 0),
+    CONSTRAINT chk_producto_activo_precio CHECK (activo = FALSE OR precio_lista > 0)
 );
 
 -- 4. TABLA USUARIO
@@ -75,6 +76,7 @@ CREATE TABLE detalle_pedido (
     CONSTRAINT chk_detalle_cantidad CHECK (cantidad > 0),
     CONSTRAINT chk_detalle_precio CHECK (precio_unitario >= 0),
     CONSTRAINT chk_detalle_subtotal CHECK (subtotal >= 0),
+    CONSTRAINT chk_detalle_subtotal_calculado CHECK (subtotal = (cantidad * precio_unitario)),
     CONSTRAINT uq_pedido_producto UNIQUE (pedido_id, producto_id)
 );
 
@@ -84,5 +86,29 @@ CREATE INDEX idx_pedido_usuario ON pedido(usuario_id);
 
 -- Acelera el listado de productos activos filtrados por categoría
 CREATE INDEX idx_producto_categoria_activo ON producto(categoria_id) WHERE activo = TRUE;
+
+-- 8. FUNCIONES Y TRIGGERS DE REGLAS DE NEGOCIO
+-- Valida que el estado de un pedido no retroceda ni cambie una vez alcanzado un estado terminal (ENTREGADO o CANCELADO)
+CREATE OR REPLACE FUNCTION fn_validar_transicion_estado_pedido()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.estado = NEW.estado THEN
+        RETURN NEW;
+    END IF;
+
+    IF OLD.estado = 'PENDIENTE' AND NEW.estado IN ('EN_PREPARACION', 'ENTREGADO', 'CANCELADO') THEN
+        RETURN NEW;
+    ELSIF OLD.estado = 'EN_PREPARACION' AND NEW.estado IN ('ENTREGADO', 'CANCELADO') THEN
+        RETURN NEW;
+    ELSE
+        RAISE EXCEPTION 'Transición de estado inválida para el pedido %: de % a %', OLD.id, OLD.estado, NEW.estado;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_validar_estado_pedido
+BEFORE UPDATE OF estado ON pedido
+FOR EACH ROW
+EXECUTE FUNCTION fn_validar_transicion_estado_pedido();
 
 COMMIT;
