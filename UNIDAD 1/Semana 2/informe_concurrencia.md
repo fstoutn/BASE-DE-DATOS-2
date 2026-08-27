@@ -112,11 +112,70 @@ La explicación fue verificada repitiendo el experimento en PostgreSQL.
 
 Los resultados fueron:
 
-Nivel de aislamiento	Primera lectura	Modificación de B	Segunda lectura de A
-READ COMMITTED	100.00	150.00	150.00
-REPEATABLE READ	100.00	150.00	100.00
+### Verificación en el motor
 
-El comportamiento observado en PostgreSQL coincidió con la explicación de la IA.
+Se verificó el comportamiento utilizando dos sesiones concurrentes de PostgreSQL.
+
+La Sesión A inició una transacción y ejecutó:
+
+```sql
+BEGIN;
+
+SELECT id, nombre, precio_lista
+FROM producto
+WHERE id = 7
+FOR UPDATE;
+
+La consulta devolvió:
+
+7 | Producto Concurrencia 2 | 200.00
+
+La Sesión B inició otra transacción y ejecutó la misma consulta sobre el producto 7:
+
+BEGIN;
+
+SELECT id, nombre, precio_lista
+FROM producto
+WHERE id = 7
+FOR UPDATE;
+
+La Sesión B quedó esperando debido al bloqueo mantenido por la Sesión A.
+
+Luego la Sesión A ejecutó:
+
+COMMIT;
+
+Después de liberar el bloqueo, la Sesión B continuó y obtuvo el producto 7 correctamente.
+
+Finalmente, se ejecutó ROLLBACK en la Sesión B para cerrar la transacción.
+
+El comportamiento observado confirmó la explicación proporcionada por la IA.
+
+
+Guardá el archivo.
+
+---
+
+## 2. Actualizá también la DUIA Parte 2
+
+En `duia_parte2.md`, buscá:
+
+```text
+### Verificación realizada
+
+dentro de Escenario 3 y reemplazá esa sección por:
+
+### Verificación realizada
+
+La Sesión A obtuvo un bloqueo sobre el producto 7 mediante `SELECT ... FOR UPDATE`.
+
+La Sesión B intentó obtener un bloqueo sobre la misma fila y quedó esperando.
+
+Después de que la Sesión A realizó `COMMIT`, el bloqueo fue liberado y la Sesión B pudo continuar y obtener el producto 7.
+
+Finalmente, se realizó `ROLLBACK` en la Sesión B para cerrar la transacción.
+
+El comportamiento observado confirmó la explicación proporcionada por la IA.
 
 Conclusión
 
